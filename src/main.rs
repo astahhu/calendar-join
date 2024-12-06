@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::env;
 use std::io::Read;
 use std::ops::Deref;
+use std::sync::Arc;
 use std::time::Duration;
 
 use std::{convert::identity, path::PathBuf, str::FromStr, sync::LazyLock};
@@ -10,10 +11,10 @@ use actix_web::http::header;
 use actix_web::web::Query;
 use actix_web::HttpResponseBuilder;
 use anyhow::anyhow;
+use async_std::sync::{Mutex, RwLock};
 use reqwest::StatusCode;
 use std::fs::File;
 use cache::TimedCache;
-use clap::builder::TypedValueParser;
 use clap::Parser;
 use clap::Subcommand;
 use lazy_static::lazy_static;
@@ -93,14 +94,12 @@ fn _index() -> String {
     "index".to_string()
 }
 
-lazy_static!{
-    static ref CALENDAR_MAP: CalendarMap = {
+lazy_static! {
+  static ref CALENDAR_MAP: CalendarMap = {
         let mut buffer = String::new();
-        let mut path = env::current_dir().unwrap();
-        path.push("config.json");
-        File::open(path.clone())
-            .expect(&format!("Could not open {}.", path.display()))
-            .read_to_string(&mut buffer).unwrap();
+        File::open(ARGS.config.as_str())
+        .expect(&format!("Could not open {}.", ARGS.config.as_str()))
+        .read_to_string(&mut buffer).unwrap();
 
         let config : Config = serde_json::from_str(&buffer).unwrap();
 
@@ -116,7 +115,7 @@ async fn merged(name: Query<CalName>) -> impl Responder {
     };
     let mut cal = match cal.as_ref() {
         Ok(cal) => cal.iter().fold(Calendar::new(), |mut a, b| {a.extend(b.components.clone()); a}),
-        Err(err) => {
+        Err(_err) => {
             return HttpResponseBuilder::new(StatusCode::INTERNAL_SERVER_ERROR)
                 .body("Internal Server Error");
         }
@@ -141,7 +140,7 @@ async fn appended(name: Query<CalName>) -> impl Responder {
     };
     let body = match cal.as_ref() {
         Ok(cal) => cal.iter().map(|cal| cal.to_string()).fold(String::new(), |a, b| a + &b),
-        Err(err) => {
+        Err(_err) => {
             return HttpResponseBuilder::new(StatusCode::INTERNAL_SERVER_ERROR)
                 .body("Internal Server Error");
         }
@@ -156,7 +155,7 @@ async fn appended(name: Query<CalName>) -> impl Responder {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| App::new().service(appended).service(merged))
-        .bind((ARGS.host, ARGS.port))?
+        .bind((ARGS.host.as_str(), ARGS.port))?
         .run()
         .await
 }

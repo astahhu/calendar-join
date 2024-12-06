@@ -5,14 +5,14 @@ use std::ops::Deref;
 use std::pin::Pin;
 use std::time::{Duration, SystemTime};
 
-pub(crate) struct TimedCache<T: Sync> {
+pub(crate) struct TimedCache<T: Send + Sync> {
     data_last_updated: RwLock<Option<DataLastUpdate<T>>>,
     generator: Box<dyn Fn() -> Pin<Box<dyn Future<Output = T>>> + 'static + Sync>,
     duration: Duration,
 }
 
 struct ReadWrapper<'a, T>(
-    // Option mau NEVER be NONE
+    // Option may NEVER be NONE
     RwLockReadGuard<'a, Option<DataLastUpdate<T>>>,
 );
 
@@ -29,7 +29,7 @@ struct DataLastUpdate<T> {
     last_updated: SystemTime,
 }
 
-impl<T: Sync> TimedCache<T> {
+impl<T: Sync + Send> TimedCache<T> {
 
     /// Create a TimedCache that generates a Value from the given Function.
     /// The Function is normally not `pure`, it is expected, that the Output can change.
@@ -91,7 +91,7 @@ impl<T: Sync> TimedCache<T> {
     }
 }
 
-impl<T: Sync, E: Sync> TimedCache<Result<T,E>> {
+impl<T: Send + Sync, E: Send + Sync> TimedCache<Result<T,E>> {
 
     pub(crate) async fn try_get(&self) -> impl Deref<Target = Result<T,E>> + '_ {
         let data = self.data_last_updated.read().await;
