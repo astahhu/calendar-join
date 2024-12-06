@@ -4,6 +4,7 @@ use std::io::Read;
 use std::ops::Deref;
 use std::time::Duration;
 
+use std::{convert::identity, path::PathBuf, str::FromStr, sync::LazyLock};
 use std::path::Path;
 use actix_web::http::header;
 use actix_web::web::Query;
@@ -21,22 +22,19 @@ use icalendar::{Calendar, parser};
 use serde::Deserialize;
 use actix_web::{get, web, App, HttpServer, Responder};
 mod cache;
+
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Args {
-    #[command(subcommand)]
-    command: Commands,
+    #[arg(long, default_value_t = 8080)]
+    port: u16,
+    #[arg(long, default_value_t = {"127.0.0.1".to_string()})]
+    host: String,
+    #[arg(short, long)]
+    config: String
 }
 
-#[derive(Subcommand)]
-enum Commands {
-    ///Merges the given calendar files into one calendar with the given Name (One Calendar in the resulting file)
-    Merge{name: String, calendar_urls: Vec<String>},
-    ///Appends the given calendar links into one File (Multiple Calendars in the resulting file)
-    Append{calendar_urls: Vec<String>},
-
-}
-
+static ARGS: LazyLock<Args> = LazyLock::new(Args::parse);
 
 #[derive(Deserialize)]
 #[serde(transparent)]
@@ -158,7 +156,7 @@ async fn appended(name: Query<CalName>) -> impl Responder {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| App::new().service(appended).service(merged))
-        .bind(("0.0.0.0", 8080))?
+        .bind((ARGS.host, ARGS.port))?
         .run()
         .await
 }
