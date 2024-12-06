@@ -13,37 +13,37 @@
           inherit system;
         };
 
-        naersk' = pkgs.callPackage naersk {};
+        naersk' = pkgs.callPackage naersk { };
 
-      in rec {
-        # For `nix build` & `nix run`:
-        defaultPackage = naersk'.buildPackage {
-          src = ./.;
-
-	  nativeBuildInputs = with pkgs; [ pkg-config ];
-	  buildInputs = with pkgs; [ openssl ];
-        };
-
+      in
+      rec {
         # For `nix develop` (optional, can be skipped):
         devShell = pkgs.mkShell {
           nativeBuildInputs = with pkgs; [ rustc cargo ];
         };
 
-	packages = {
-	  docker = pkgs.dockerTools.buildImage {
-	    name = "calendar-join";
+        packages = rec {
+          default = naersk'.buildPackage {
+            src = ./.;
+
+            nativeBuildInputs = with pkgs; [ pkg-config ];
+            buildInputs = with pkgs; [ openssl ];
+          };
+
+          docker = pkgs.dockerTools.buildImage {
+            name = "calendar-join";
             tag = "latest";
 
             config = {
-	      Env = ["SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"];
-	      Cmd = ["${defaultPackage}/bin/calendar-join"];
-	      WorkingDir = "/data";
-	      ExposedPorts = {
-		"8080/tcp" = {};
-	      };
-	    };
-	  };
-	};
+              Env = [ "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt" ];
+              Cmd = [ "${default}/bin/calendar-join" ];
+              WorkingDir = "/data";
+              ExposedPorts = {
+                "8080/tcp" = { };
+              };
+            };
+          };
+        };
       }
     );
 }
