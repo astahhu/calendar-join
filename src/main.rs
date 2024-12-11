@@ -12,6 +12,7 @@ use actix_web::web::Query;
 use actix_web::HttpResponseBuilder;
 use anyhow::anyhow;
 use async_std::sync::{Mutex, RwLock};
+use icalendar::Component;
 use reqwest::StatusCode;
 use std::fs::File;
 use cache::TimedCache;
@@ -19,7 +20,7 @@ use clap::Parser;
 use clap::Subcommand;
 use lazy_static::lazy_static;
 use reqwest::Url;
-use icalendar::{Calendar, parser};
+use icalendar::{parser, Calendar, CalendarComponent::{self, Event, Venue, Todo, Other}};
 use serde::Deserialize;
 use actix_web::{get, web, App, HttpServer, Responder};
 mod cache;
@@ -114,7 +115,24 @@ async fn merged(name: Query<CalName>) -> impl Responder {
             .body("Could not find Calendar")
     };
     let mut cal = match cal.as_ref() {
-        Ok(cal) => cal.iter().fold(Calendar::new(), |mut a, b| {a.extend(b.components.clone()); a}),
+        Ok(cal) => cal
+            .iter()
+            .fold(Calendar::new(), 
+                |mut a, b| {
+                    a.extend(b.components.clone().into_iter().map(|mut c| {
+                        match c {
+                        Event(ref mut e) => {
+                            e.summary(format!("{} - {}", b.get_name().unwrap_or("UNKNOWN"), e.get_summary().unwrap_or("UNKNOWN")).as_str());
+                        },
+                        Todo(ref mut t) => {
+                            t.summary(format!("{} - {}", b.get_name().unwrap_or("UNKNOWN"), t.get_summary().unwrap_or("UNKNOWN")).as_str());
+                        },
+                        _ => {}
+                    }
+                        c
+                    }));
+                    a
+                }),
         Err(_err) => {
             return HttpResponseBuilder::new(StatusCode::INTERNAL_SERVER_ERROR)
                 .body("Internal Server Error");
